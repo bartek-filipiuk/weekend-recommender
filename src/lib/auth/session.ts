@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { sessions, users, type Session, type NewSession } from '@/db/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, gt, lt } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 
 /**
@@ -184,7 +184,7 @@ export async function cleanupExpiredSessions(): Promise<number> {
     const now = new Date();
     const result = await db
       .delete(sessions)
-      .where(gt(now, sessions.expiresAt))
+      .where(lt(sessions.expiresAt, now))
       .returning({ id: sessions.id });
 
     return result.length;

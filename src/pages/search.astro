@@ -1,0 +1,91 @@
+---
+import Layout from '@/layouts/Layout.astro';
+import { validateSession, SESSION_COOKIE_NAME } from '@/lib/auth/session';
+import SearchForm from '@/components/SearchForm.astro';
+
+// Server-side authentication check
+const sessionToken = Astro.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+if (!sessionToken) {
+  return Astro.redirect('/login');
+}
+
+const sessionData = await validateSession(sessionToken);
+
+if (!sessionData) {
+  return Astro.redirect('/login');
+}
+
+const username = sessionData.username;
+---
+
+<Layout title="Search Activities - Weekend Finder">
+  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <!-- Navigation Header -->
+    <nav class="bg-white shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+          <div class="flex items-center">
+            <a href="/dashboard" class="text-xl font-bold text-indigo-600 hover:text-indigo-700">
+              Weekend Finder
+            </a>
+          </div>
+          <div class="flex items-center space-x-4">
+            <span class="text-sm text-gray-700">
+              Welcome, <span class="font-medium">{username}</span>
+            </span>
+            <button
+              id="logout-btn"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Page Header -->
+      <div class="mb-8">
+        <h2 class="text-3xl font-bold text-gray-900">Search Weekend Activities</h2>
+        <p class="mt-2 text-gray-600">
+          Tell us about your weekend plans and we'll find the perfect activities for you.
+        </p>
+      </div>
+
+      <!-- Search Form -->
+      <SearchForm />
+
+      <!-- Back to Dashboard Link -->
+      <div class="mt-6 text-center">
+        <a
+          href="/dashboard"
+          class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-700"
+        >
+          <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Dashboard
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const logoutBtn = document.getElementById('logout-btn');
+
+    logoutBtn?.addEventListener('click', async () => {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+        });
+        window.location.href = '/login';
+      } catch (error) {
+        console.error('Logout failed:', error);
+        window.location.href = '/login';
+      }
+    });
+  </script>
+</Layout>

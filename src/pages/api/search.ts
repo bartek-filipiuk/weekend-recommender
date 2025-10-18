@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { validateSession } from '@/lib/auth/session';
+import { validateSession, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import {
   getCachedSearch,
   storeSearchResults,
@@ -39,7 +39,7 @@ import type { SearchRequest, AgentStreamEvent } from '@/lib/search/types';
  */
 export const POST: APIRoute = async ({ request, cookies }) => {
   // Validate session
-  const sessionToken = cookies.get('session')?.value;
+  const sessionToken = cookies.get(SESSION_COOKIE_NAME)?.value;
 
   if (!sessionToken) {
     return new Response(
@@ -112,7 +112,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
       try {
         // Check cache
-        const cached = await getCachedSearch(searchParams, sessionData.user.id);
+        const cached = await getCachedSearch(searchParams, sessionData.userId);
 
         if (cached) {
           // Cache hit - send immediate response
@@ -156,7 +156,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         const cacheId = await storeSearchResults(
           searchParams,
           recommendations,
-          sessionData.user.id,
+          sessionData.userId,
           metadata
         );
 
