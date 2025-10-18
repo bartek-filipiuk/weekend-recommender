@@ -75,8 +75,20 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       .where(eq(users.username, username))
       .limit(1);
 
-    if (result.length === 0) {
-      // User not found - return generic error to prevent username enumeration
+    // Dummy hash for timing attack prevention
+    // This is a valid Argon2id hash that will always fail verification
+    // but takes the same time as verifying a real password
+    const DUMMY_HASH =
+      '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQxMjM0NTY3ODkwMTIzNDU2Nzg5MDEy$K7FwDqGwLGHQHdLrJvJlOjDxCvqPvZf4xKx8V7rN5F8';
+
+    // Always perform password verification to prevent timing attacks
+    // Use dummy hash if user not found
+    const hashToVerify = result.length > 0 ? result[0].passwordHash : DUMMY_HASH;
+    const isPasswordValid = await verifyPassword(hashToVerify, password);
+
+    // Check if user exists and password is valid
+    if (result.length === 0 || !isPasswordValid) {
+      // User not found or invalid password - return generic error
       return new Response(
         JSON.stringify({
           error: 'Invalid credentials',
@@ -89,24 +101,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       );
     }
 
+    // User authenticated successfully
     const user = result[0];
-
-    // Verify password
-    const isPasswordValid = await verifyPassword(user.passwordHash, password);
-
-    if (!isPasswordValid) {
-      // Invalid password - return generic error
-      return new Response(
-        JSON.stringify({
-          error: 'Invalid credentials',
-          message: 'Invalid username or password',
-        }),
-        {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
 
     // Create session
     const sessionToken = await createSession(user.id);
