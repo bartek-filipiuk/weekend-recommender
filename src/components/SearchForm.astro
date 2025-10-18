@@ -1,0 +1,305 @@
+---
+/**
+ * SearchForm component
+ *
+ * Form for searching weekend activities with:
+ * - City input
+ * - Date range pickers (start/end)
+ * - Dynamic attendees list (add/remove)
+ * - Optional preferences text
+ *
+ * On submit, redirects to /results/[id] and initiates SSE search
+ */
+---
+
+<form id="search-form" class="bg-white rounded-lg shadow-md p-8 space-y-6">
+  <!-- City -->
+  <div>
+    <label for="city" class="block text-sm font-medium text-gray-700 mb-1">
+      City <span class="text-red-500">*</span>
+    </label>
+    <input
+      id="city"
+      name="city"
+      type="text"
+      required
+      class="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+      placeholder="e.g., Wrocław, Warsaw, Kraków"
+    />
+    <p id="city-error" class="mt-1 text-sm text-red-600 hidden"></p>
+  </div>
+
+  <!-- Date Range -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- Start Date -->
+    <div>
+      <label for="date-start" class="block text-sm font-medium text-gray-700 mb-1">
+        Start Date <span class="text-red-500">*</span>
+      </label>
+      <input
+        id="date-start"
+        name="dateRangeStart"
+        type="date"
+        required
+        class="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+      />
+      <p id="date-start-error" class="mt-1 text-sm text-red-600 hidden"></p>
+    </div>
+
+    <!-- End Date -->
+    <div>
+      <label for="date-end" class="block text-sm font-medium text-gray-700 mb-1">
+        End Date <span class="text-red-500">*</span>
+      </label>
+      <input
+        id="date-end"
+        name="dateRangeEnd"
+        type="date"
+        required
+        class="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+      />
+      <p id="date-end-error" class="mt-1 text-sm text-red-600 hidden"></p>
+    </div>
+  </div>
+
+  <!-- Attendees -->
+  <div>
+    <div class="flex items-center justify-between mb-2">
+      <label class="block text-sm font-medium text-gray-700">
+        Attendees <span class="text-red-500">*</span>
+      </label>
+      <button
+        type="button"
+        id="add-attendee-btn"
+        class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      >
+        <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        Add Attendee
+      </button>
+    </div>
+
+    <div id="attendees-container" class="space-y-3">
+      <!-- Attendee rows will be added dynamically -->
+    </div>
+    <p id="attendees-error" class="mt-1 text-sm text-red-600 hidden"></p>
+  </div>
+
+  <!-- Preferences (optional) -->
+  <div>
+    <label for="preferences" class="block text-sm font-medium text-gray-700 mb-1">
+      Preferences (optional)
+    </label>
+    <textarea
+      id="preferences"
+      name="preferences"
+      rows="3"
+      class="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+      placeholder="e.g., indoor activities, climbing, museums, family-friendly..."
+    ></textarea>
+  </div>
+
+  <!-- General Error -->
+  <div id="general-error" class="hidden">
+    <div class="rounded-md bg-red-50 p-4">
+      <p class="text-sm text-red-800"></p>
+    </div>
+  </div>
+
+  <!-- Submit Button -->
+  <div>
+    <button
+      type="submit"
+      id="submit-btn"
+      class="flex w-full justify-center rounded-md border border-transparent bg-indigo-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      Search Activities
+    </button>
+  </div>
+</form>
+
+<script>
+  interface Attendee {
+    age: number;
+    role: 'child' | 'adult' | 'infant';
+  }
+
+  const form = document.getElementById('search-form') as HTMLFormElement;
+  const cityInput = document.getElementById('city') as HTMLInputElement;
+  const dateStartInput = document.getElementById('date-start') as HTMLInputElement;
+  const dateEndInput = document.getElementById('date-end') as HTMLInputElement;
+  const preferencesInput = document.getElementById('preferences') as HTMLTextAreaElement;
+  const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
+  const addAttendeeBtn = document.getElementById('add-attendee-btn') as HTMLButtonElement;
+  const attendeesContainer = document.getElementById('attendees-container') as HTMLDivElement;
+  const generalError = document.getElementById('general-error') as HTMLDivElement;
+
+  let attendeeCount = 0;
+
+  // Set default dates (this weekend)
+  const today = new Date();
+  const nextSaturday = new Date(today);
+  nextSaturday.setDate(today.getDate() + ((6 - today.getDay() + 7) % 7));
+  const nextSunday = new Date(nextSaturday);
+  nextSunday.setDate(nextSaturday.getDate() + 1);
+
+  dateStartInput.value = nextSaturday.toISOString().split('T')[0] || '';
+  dateEndInput.value = nextSunday.toISOString().split('T')[0] || '';
+
+  // Add attendee row
+  function addAttendeeRow(age = '', role: 'child' | 'adult' | 'infant' = 'child') {
+    const id = ++attendeeCount;
+    const div = document.createElement('div');
+    div.className = 'flex items-start space-x-3';
+    div.dataset.attendeeId = id.toString();
+
+    div.innerHTML = `
+      <div class="flex-1 grid grid-cols-2 gap-3">
+        <div>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            placeholder="Age"
+            value="${age}"
+            data-attendee-age="${id}"
+            class="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+            required
+          />
+        </div>
+        <div>
+          <select
+            data-attendee-role="${id}"
+            class="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+            required
+          >
+            <option value="child" ${role === 'child' ? 'selected' : ''}>Child</option>
+            <option value="adult" ${role === 'adult' ? 'selected' : ''}>Adult</option>
+            <option value="infant" ${role === 'infant' ? 'selected' : ''}>Infant</option>
+          </select>
+        </div>
+      </div>
+      <button
+        type="button"
+        data-remove-attendee="${id}"
+        class="mt-2 text-red-600 hover:text-red-800 focus:outline-none"
+        aria-label="Remove attendee"
+      >
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </button>
+    `;
+
+    attendeesContainer.appendChild(div);
+
+    // Add remove handler
+    const removeBtn = div.querySelector(`[data-remove-attendee="${id}"]`) as HTMLButtonElement;
+    removeBtn?.addEventListener('click', () => {
+      div.remove();
+    });
+  }
+
+  // Initialize with one attendee
+  addAttendeeRow();
+
+  // Add attendee button click
+  addAttendeeBtn.addEventListener('click', () => {
+    addAttendeeRow();
+  });
+
+  // Form validation and submission
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    // Clear previous errors
+    document.querySelectorAll('.text-red-600').forEach(el => el.classList.add('hidden'));
+    generalError.classList.add('hidden');
+
+    // Validate city
+    if (!cityInput.value.trim()) {
+      showError('city-error', 'City is required');
+      return;
+    }
+
+    // Validate dates
+    if (!dateStartInput.value || !dateEndInput.value) {
+      showError('date-start-error', 'Both dates are required');
+      return;
+    }
+
+    if (new Date(dateEndInput.value) < new Date(dateStartInput.value)) {
+      showError('date-end-error', 'End date must be after start date');
+      return;
+    }
+
+    // Collect attendees
+    const attendees: Attendee[] = [];
+    const attendeeRows = attendeesContainer.querySelectorAll('[data-attendee-id]');
+
+    if (attendeeRows.length === 0) {
+      showError('attendees-error', 'At least one attendee is required');
+      return;
+    }
+
+    for (const row of attendeeRows) {
+      const id = row.getAttribute('data-attendee-id');
+      const ageInput = row.querySelector(`[data-attendee-age="${id}"]`) as HTMLInputElement;
+      const roleSelect = row.querySelector(`[data-attendee-role="${id}"]`) as HTMLSelectElement;
+
+      const age = parseInt(ageInput.value, 10);
+
+      if (isNaN(age) || age < 0 || age > 100) {
+        showError('attendees-error', 'Please enter valid ages (0-100) for all attendees');
+        return;
+      }
+
+      attendees.push({
+        age,
+        role: roleSelect.value as 'child' | 'adult' | 'infant',
+      });
+    }
+
+    // Prepare request body
+    const searchRequest = {
+      city: cityInput.value.trim(),
+      dateRangeStart: dateStartInput.value,
+      dateRangeEnd: dateEndInput.value,
+      attendees,
+      preferences: preferencesInput.value.trim() || undefined,
+    };
+
+    // Disable form
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Starting search...';
+
+    try {
+      // Store search params in sessionStorage for results page
+      sessionStorage.setItem('pendingSearch', JSON.stringify(searchRequest));
+
+      // Redirect to results page (which will initiate the SSE search)
+      window.location.href = '/results/new';
+    } catch (error) {
+      showGeneralError('Failed to start search. Please try again.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Search Activities';
+    }
+  });
+
+  function showError(elementId: string, message: string) {
+    const errorEl = document.getElementById(elementId);
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  function showGeneralError(message: string) {
+    const errorText = generalError.querySelector('p');
+    if (errorText) {
+      errorText.textContent = message;
+    }
+    generalError.classList.remove('hidden');
+  }
+</script>

@@ -1,0 +1,522 @@
+---
+import Layout from '@/layouts/Layout.astro';
+import { validateSession, SESSION_COOKIE_NAME } from '@/lib/auth/session';
+import ProgressBar from '@/components/ProgressBar.astro';
+import RecommendationCard from '@/components/RecommendationCard.astro';
+import { db } from '@/db';
+import { searchCache } from '@/db/schema';
+import { eq, and, gte } from 'drizzle-orm';
+
+// Server-side authentication check
+const sessionToken = Astro.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+if (!sessionToken) {
+  return Astro.redirect('/login');
+}
+
+const sessionData = await validateSession(sessionToken);
+
+if (!sessionData) {
+  return Astro.redirect('/login');
+}
+
+const username = sessionData.username;
+const { id } = Astro.params;
+
+// Check if this is a cached result (id is a number) or a new search (id is 'new')
+let cachedResult = null;
+
+if (id && id !== 'new') {
+  const cacheId = parseInt(id, 10);
+
+  if (!isNaN(cacheId)) {
+    // Fetch cached result from database
+    const [cached] = await db
+      .select()
+      .from(searchCache)
+      .where(
+        and(
+          eq(searchCache.id, cacheId),
+          eq(searchCache.userId, sessionData.userId),
+          gte(searchCache.expiresAt, new Date())
+        )
+      )
+      .limit(1);
+
+    if (cached) {
+      cachedResult = {
+        id: cached.id,
+        city: cached.city,
+        dateRangeStart: cached.dateRangeStart,
+        dateRangeEnd: cached.dateRangeEnd,
+        attendees: cached.attendees,
+        preferences: cached.preferences,
+        recommendations: cached.recommendations,
+        metadata: cached.agentMetadata,
+        createdAt: cached.createdAt,
+      };
+    }
+  }
+}
+---
+
+<Layout title="Search Results - Weekend Finder">
+  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <!-- Navigation Header -->
+    <nav class="bg-white shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+          <div class="flex items-center">
+            <a href="/dashboard" class="text-xl font-bold text-indigo-600 hover:text-indigo-700">
+              Weekend Finder
+            </a>
+          </div>
+          <div class="flex items-center space-x-4">
+            <span class="text-sm text-gray-700">
+              Welcome, <span class="font-medium">{username}</span>
+            </span>
+            <button
+              id="logout-btn"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Page Header -->
+      <div class="mb-8">
+        <h2 class="text-3xl font-bold text-gray-900">Weekend Activity Recommendations</h2>
+        <p id="search-details" class="mt-2 text-gray-600">
+          <!-- Will be populated with search details -->
+        </p>
+      </div>
+
+      <!-- Progress Bar (shown during new search) -->
+      <ProgressBar />
+
+      <!-- Results Container -->
+      <div id="results-container" class="hidden">
+        <!-- Cache Info Banner (for cached results) -->
+        <div id="cache-banner" class="hidden mb-6">
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex items-start">
+              <svg class="h-5 w-5 text-blue-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+              <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                  <span class="font-medium">Cached result:</span> These recommendations were generated previously.
+                  <span id="cache-date"></span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div class="flex items-center space-x-4">
+            <a
+              href="/search"
+              class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+              New Search
+            </a>
+            <a
+              href="/dashboard"
+              class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              Dashboard
+            </a>
+          </div>
+
+          <button
+            id="copy-all-btn"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            Copy All
+          </button>
+        </div>
+
+        <!-- Recommendations Grid -->
+        <div id="recommendations-grid" class="grid grid-cols-1 gap-6">
+          <!-- Recommendation cards will be added here -->
+        </div>
+
+        <!-- Metadata (execution details) -->
+        <div id="metadata-section" class="mt-8 hidden">
+          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <h4 class="text-sm font-semibold text-gray-700 mb-2">Search Details</h4>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p class="text-gray-500">Execution Time</p>
+                <p id="exec-time" class="font-medium text-gray-900">-</p>
+              </div>
+              <div>
+                <p class="text-gray-500">Model</p>
+                <p id="model" class="font-medium text-gray-900">-</p>
+              </div>
+              <div>
+                <p class="text-gray-500">Cost (est.)</p>
+                <p id="cost" class="font-medium text-gray-900">-</p>
+              </div>
+              <div>
+                <p class="text-gray-500">Access Count</p>
+                <p id="access-count" class="font-medium text-gray-900">-</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Container -->
+      <div id="error-container" class="hidden">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <svg class="mx-auto h-12 w-12 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <h3 class="mt-4 text-lg font-medium text-red-900">Search Failed</h3>
+          <p id="error-message" class="mt-2 text-sm text-red-700">
+            An error occurred while searching for activities.
+          </p>
+          <div class="mt-6">
+            <a
+              href="/search"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Try Again
+            </a>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script define:vars={{ cachedResult }}>
+    const resultsContainer = document.getElementById('results-container');
+    const recommendationsGrid = document.getElementById('recommendations-grid');
+    const errorContainer = document.getElementById('error-container');
+    const searchDetails = document.getElementById('search-details');
+    const cacheBanner = document.getElementById('cache-banner');
+    const cacheDate = document.getElementById('cache-date');
+    const metadataSection = document.getElementById('metadata-section');
+    const copyAllBtn = document.getElementById('copy-all-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    let currentRecommendations = null;
+
+    // Logout handler
+    logoutBtn?.addEventListener('click', async () => {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/login';
+      } catch (error) {
+        console.error('Logout failed:', error);
+        window.location.href = '/login';
+      }
+    });
+
+    // Copy all recommendations to clipboard
+    copyAllBtn?.addEventListener('click', async () => {
+      if (!currentRecommendations || !currentRecommendations.recommendations) return;
+
+      const text = formatRecommendationsForClipboard(currentRecommendations.recommendations);
+
+      try {
+        await navigator.clipboard.writeText(text);
+
+        // Visual feedback
+        const originalText = copyAllBtn.innerHTML;
+        copyAllBtn.innerHTML = `
+          <svg class="h-4 w-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+          </svg>
+          Copied!
+        `;
+
+        setTimeout(() => {
+          copyAllBtn.innerHTML = originalText;
+        }, 2000);
+      } catch (error) {
+        console.error('Failed to copy:', error);
+        alert('Failed to copy to clipboard');
+      }
+    });
+
+    function formatRecommendationsForClipboard(recommendations) {
+      const items = recommendations.activities || recommendations.items || [];
+      const lines = [`Weekend Activity Recommendations\n${'='.repeat(40)}\n`];
+
+      items.forEach((activity, index) => {
+        const rank = ['🥇', '🥈', '🥉'][index] || `#${index + 1}`;
+        lines.push(`${rank} ${activity.name}`);
+        lines.push(`${activity.description}\n`);
+        lines.push(`📍 Location: ${activity.location}`);
+        lines.push(`💰 Cost: ${activity.cost}`);
+        lines.push(`💡 Why: ${activity.reasoning}\n`);
+        lines.push('');
+      });
+
+      return lines.join('\n');
+    }
+
+    function showError(message) {
+      if (errorContainer && window.hideProgress) {
+        window.hideProgress();
+        errorContainer.classList.remove('hidden');
+        const errorMessage = document.getElementById('error-message');
+        if (errorMessage) {
+          errorMessage.textContent = message;
+        }
+      }
+    }
+
+    function displayResults(data, isCached = false) {
+      if (window.hideProgress) {
+        window.hideProgress();
+      }
+
+      currentRecommendations = data;
+
+      // Show results container
+      resultsContainer?.classList.remove('hidden');
+
+      // Show cache banner if cached
+      if (isCached && cacheBanner && cacheDate) {
+        cacheBanner.classList.remove('hidden');
+        if (data.createdAt) {
+          const date = new Date(data.createdAt);
+          cacheDate.textContent = `Retrieved ${date.toLocaleString()}`;
+        }
+      }
+
+      // Populate search details
+      if (searchDetails && data.city) {
+        const dateStart = new Date(data.dateRangeStart).toLocaleDateString();
+        const dateEnd = new Date(data.dateRangeEnd).toLocaleDateString();
+        searchDetails.textContent = `${data.city} • ${dateStart} - ${dateEnd}`;
+      }
+
+      // Display recommendations
+      const activities = data.recommendations?.activities || data.recommendations?.items || [];
+
+      activities.forEach((activity, index) => {
+        const card = createRecommendationCard(activity, index + 1);
+        recommendationsGrid?.appendChild(card);
+      });
+
+      // Display metadata
+      if (data.metadata && metadataSection) {
+        metadataSection.classList.remove('hidden');
+
+        const execTime = document.getElementById('exec-time');
+        const model = document.getElementById('model');
+        const cost = document.getElementById('cost');
+        const accessCount = document.getElementById('access-count');
+
+        if (execTime && data.metadata.executionTimeMs) {
+          execTime.textContent = `${(data.metadata.executionTimeMs / 1000).toFixed(2)}s`;
+        }
+        if (model && data.metadata.model) {
+          model.textContent = data.metadata.model;
+        }
+        if (cost && data.metadata.estimatedCost !== undefined) {
+          cost.textContent = `$${data.metadata.estimatedCost.toFixed(4)}`;
+        }
+        if (accessCount && data.accessCount) {
+          accessCount.textContent = `${data.accessCount}x`;
+        }
+      }
+    }
+
+    function createRecommendationCard(activity, rank) {
+      const div = document.createElement('div');
+      div.className = 'bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow';
+
+      const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+      const rankEmoji = medals[rank] || `#${rank}`;
+
+      div.innerHTML = `
+        <div class="flex items-start justify-between mb-4">
+          <div class="flex items-center space-x-2">
+            <span class="text-3xl">${rankEmoji}</span>
+            <h3 class="text-xl font-bold text-gray-900">${activity.name}</h3>
+          </div>
+        </div>
+        <p class="text-gray-700 mb-4 leading-relaxed">${activity.description}</p>
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div class="flex items-start space-x-2">
+            <svg class="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wide">Location</p>
+              <p class="text-sm text-gray-900 font-medium">${activity.location}</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-2">
+            <svg class="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wide">Cost</p>
+              <p class="text-sm text-gray-900 font-medium">${activity.cost}</p>
+            </div>
+          </div>
+        </div>
+        <div class="border-t border-gray-200 pt-4">
+          <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Why this recommendation</p>
+          <p class="text-sm text-gray-600 italic">${activity.reasoning}</p>
+        </div>
+      `;
+
+      return div;
+    }
+
+    // Main logic: handle cached result or new search
+    if (cachedResult) {
+      // Display cached result immediately
+      displayResults(cachedResult, true);
+    } else {
+      // New search - get params from sessionStorage
+      const pendingSearchJson = sessionStorage.getItem('pendingSearch');
+
+      if (!pendingSearchJson) {
+        showError('No search parameters found. Please start a new search.');
+      } else {
+        sessionStorage.removeItem('pendingSearch');
+        const searchParams = JSON.parse(pendingSearchJson);
+
+        // Show progress
+        if (window.showProgress) {
+          window.showProgress();
+          window.addProgressMessage('Initiating search...', 'info');
+        }
+
+        // Populate search details
+        if (searchDetails) {
+          const dateStart = new Date(searchParams.dateRangeStart).toLocaleDateString();
+          const dateEnd = new Date(searchParams.dateRangeEnd).toLocaleDateString();
+          searchDetails.textContent = `${searchParams.city} • ${dateStart} - ${dateEnd}`;
+        }
+
+        // Start SSE search
+        fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(searchParams),
+        })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Search request failed');
+            }
+
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+
+            if (!reader) {
+              throw new Error('No response body');
+            }
+
+            function readChunk() {
+              reader.read().then(({ done, value }) => {
+                if (done) {
+                  return;
+                }
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const event = JSON.parse(line.slice(6));
+                      handleSSEEvent(event);
+                    } catch (e) {
+                      console.error('Failed to parse SSE event:', e);
+                    }
+                  }
+                }
+
+                readChunk();
+              }).catch(error => {
+                console.error('Stream error:', error);
+                showError('Connection lost during search. Please try again.');
+              });
+            }
+
+            readChunk();
+          })
+          .catch(error => {
+            console.error('Search error:', error);
+            showError('Failed to connect to search service. Please try again.');
+          });
+      }
+    }
+
+    function handleSSEEvent(event) {
+      console.log('SSE Event:', event);
+
+      if (event.type === 'start') {
+        if (window.addProgressMessage) {
+          window.addProgressMessage(event.message || 'Starting search...', 'info');
+          window.updateProgressBar(10);
+        }
+      } else if (event.type === 'tool_use') {
+        if (window.addProgressMessage) {
+          const tool = event.tool || 'unknown';
+          window.addProgressMessage(`Using tool: ${tool}`, 'info');
+          window.updateProgressBar(30);
+        }
+      } else if (event.type === 'tool_result') {
+        if (window.addProgressMessage) {
+          window.addProgressMessage('Processing search results...', 'info');
+          window.updateProgressBar(60);
+        }
+      } else if (event.type === 'text_delta') {
+        if (window.updateProgressBar) {
+          window.updateProgressBar(80);
+        }
+      } else if (event.type === 'complete') {
+        if (window.addProgressMessage) {
+          window.addProgressMessage('Search complete!', 'success');
+          window.updateProgressBar(100);
+        }
+
+        // Display results
+        setTimeout(() => {
+          const resultData = {
+            city: sessionStorage.getItem('lastSearchCity') || '',
+            dateRangeStart: sessionStorage.getItem('lastSearchStart') || '',
+            dateRangeEnd: sessionStorage.getItem('lastSearchEnd') || '',
+            recommendations: event.recommendations,
+            metadata: event.metadata,
+            accessCount: event.accessCount || 1,
+            createdAt: new Date().toISOString(),
+          };
+
+          displayResults(resultData, event.cached || false);
+
+          // Update URL to use cache ID if available
+          if (event.cacheId) {
+            window.history.replaceState({}, '', `/results/${event.cacheId}`);
+          }
+        }, 500);
+      } else if (event.type === 'error') {
+        showError(event.error || 'An unknown error occurred');
+      }
+    }
+  </script>
+</Layout>

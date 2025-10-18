@@ -1,6 +1,7 @@
 ---
 import Layout from '@/layouts/Layout.astro';
 import { validateSession, SESSION_COOKIE_NAME } from '@/lib/auth/session';
+import { getUserSearchHistory } from '@/lib/cache/manager';
 
 // Server-side authentication check
 const sessionToken = Astro.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -15,7 +16,11 @@ if (!sessionData) {
   return Astro.redirect('/login');
 }
 
-const username = sessionData.user.username;
+const username = sessionData.username;
+
+// Fetch recent search history
+const searchHistory = await getUserSearchHistory(sessionData.userId, 5);
+const now = new Date();
 ---
 
 <Layout title="Dashboard - Weekend Finder">
@@ -45,52 +50,117 @@ const username = sessionData.user.username;
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <!-- Dashboard Header -->
-      <div class="mb-8">
-        <h2 class="text-3xl font-bold text-gray-900">Dashboard</h2>
-        <p class="mt-2 text-gray-600">Plan your next weekend adventure</p>
+      <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-3xl font-bold text-gray-900">Dashboard</h2>
+          <p class="mt-2 text-gray-600">Plan your next weekend adventure</p>
+        </div>
+        <a
+          href="/search"
+          class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          New Search
+        </a>
       </div>
 
-      <!-- Empty State / Coming Soon -->
-      <div class="bg-white rounded-lg shadow-md p-12 text-center">
-        <svg
-          class="mx-auto h-24 w-24 text-gray-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-          ></path>
-        </svg>
-        <h3 class="mt-4 text-xl font-medium text-gray-900">Search Features Coming Soon</h3>
-        <p class="mt-2 text-gray-500">
-          Weekend activity search and recommendations will be available in the next update.
-        </p>
-        <div class="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div class="bg-gray-50 rounded-lg p-6">
-            <h4 class="font-semibold text-gray-900">AI-Powered Search</h4>
-            <p class="mt-2 text-sm text-gray-600">
-              Find perfect activities using Claude AI
-            </p>
+      <!-- Recent Searches -->
+      {searchHistory.length > 0 ? (
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">Recent Searches</h3>
           </div>
-          <div class="bg-gray-50 rounded-lg p-6">
-            <h4 class="font-semibold text-gray-900">Smart Recommendations</h4>
-            <p class="mt-2 text-sm text-gray-600">
-              Personalized suggestions for your family
-            </p>
-          </div>
-          <div class="bg-gray-50 rounded-lg p-6">
-            <h4 class="font-semibold text-gray-900">Search History</h4>
-            <p class="mt-2 text-sm text-gray-600">
-              Access past searches instantly
-            </p>
+          <div class="divide-y divide-gray-200">
+            {searchHistory.map((search) => {
+              const isExpired = search.expiresAt < now;
+              const dateStart = new Date(search.dateRangeStart).toLocaleDateString();
+              const dateEnd = new Date(search.dateRangeEnd).toLocaleDateString();
+              const createdAt = new Date(search.createdAt).toLocaleDateString();
+
+              return (
+                <a
+                  href={`/results/${search.id}`}
+                  class="block px-6 py-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                      <div class="flex items-center space-x-2">
+                        <h4 class="text-base font-medium text-gray-900">{search.city}</h4>
+                        {isExpired && (
+                          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                            Expired
+                          </span>
+                        )}
+                      </div>
+                      <div class="mt-1 flex items-center space-x-4 text-sm text-gray-500">
+                        <span class="flex items-center">
+                          <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                          </svg>
+                          {dateStart} - {dateEnd}
+                        </span>
+                        <span class="flex items-center">
+                          <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                          </svg>
+                          {search.attendees}
+                        </span>
+                      </div>
+                      {search.preferences && (
+                        <p class="mt-2 text-sm text-gray-600 line-clamp-1">
+                          {search.preferences}
+                        </p>
+                      )}
+                    </div>
+                    <div class="ml-4 flex-shrink-0 text-right">
+                      <p class="text-xs text-gray-500">Searched</p>
+                      <p class="text-sm font-medium text-gray-900">{createdAt}</p>
+                      <p class="text-xs text-gray-500 mt-1">
+                        Viewed {search.accessCount}x
+                      </p>
+                    </div>
+                  </div>
+                </a>
+              );
+            })}
           </div>
         </div>
-      </div>
+      ) : (
+        <!-- Empty State -->
+        <div class="bg-white rounded-lg shadow-md p-12 text-center">
+          <svg
+            class="mx-auto h-24 w-24 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+          <h3 class="mt-4 text-xl font-medium text-gray-900">No Searches Yet</h3>
+          <p class="mt-2 text-gray-500">
+            Get started by creating your first weekend activity search.
+          </p>
+          <div class="mt-8">
+            <a
+              href="/search"
+              class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+              Start Searching
+            </a>
+          </div>
+        </div>
+      )}
     </main>
   </div>
 
