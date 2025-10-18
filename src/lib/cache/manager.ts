@@ -47,7 +47,7 @@ export async function getCachedSearch(
   params: SearchRequest,
   userId: number
 ): Promise<CachedSearchResult | null> {
-  const cacheKey = generateCacheKey(params);
+  const cacheKey = generateCacheKey(params, userId);
 
   const [cached] = await db
     .select()
@@ -100,7 +100,7 @@ export async function storeSearchResults(
   userId: number,
   metadata: CacheMetadata
 ): Promise<number> {
-  const cacheKey = generateCacheKey(params);
+  const cacheKey = generateCacheKey(params, userId);
   const expiresAt = new Date(Date.now() + CACHE_TTL_MS);
 
   // Serialize attendees to text (for database storage)

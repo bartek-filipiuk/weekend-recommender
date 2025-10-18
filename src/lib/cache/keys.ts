@@ -4,15 +4,22 @@ import type { SearchRequest } from '../search/types';
 /**
  * Generate a consistent cache key from search parameters
  *
- * The cache key is a SHA-256 hash of normalized search parameters.
- * This ensures identical searches produce the same cache key.
+ * The cache key is a SHA-256 hash of normalized search parameters INCLUDING userId.
+ * This ensures identical searches by the SAME USER produce the same cache key,
+ * while different users get different cache keys for the same search parameters.
  *
  * @param params - Search request parameters
+ * @param userId - User ID to scope the cache key
  * @returns SHA-256 hash (64-character hex string)
  */
-export function generateCacheKey(params: SearchRequest): string {
+export function generateCacheKey(params: SearchRequest, userId: number): string {
   // Normalize parameters for consistent hashing
   const normalized = {
+    // IMPORTANT: Include userId to make cache user-scoped
+    // This prevents unique constraint violations when multiple users
+    // search for the same thing
+    userId,
+
     // Normalize city (lowercase, trim)
     city: params.city.toLowerCase().trim(),
 
