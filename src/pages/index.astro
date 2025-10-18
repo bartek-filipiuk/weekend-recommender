@@ -1,16 +1,16 @@
 ---
-// Temporary landing page - will be replaced in Stage 5
----
+import { validateSession, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Weekend Finder</title>
-  </head>
-  <body>
-    <h1>Weekend Finder</h1>
-    <p>Foundation setup complete. Stay tuned for more features!</p>
-  </body>
-</html>
+// Check if user is authenticated
+const sessionToken = Astro.cookies.get(SESSION_COOKIE_NAME)?.value;
+const sessionData = sessionToken ? await validateSession(sessionToken) : null;
+
+// Redirect based on auth state
+if (sessionData) {
+  // User is authenticated → go to dashboard
+  return Astro.redirect('/dashboard');
+} else {
+  // User is not authenticated → go to login
+  return Astro.redirect('/login');
+}
+---
