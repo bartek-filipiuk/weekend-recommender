@@ -1,8 +1,8 @@
 # Weekend Finder - Work Context & Resumption Guide
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Last Updated:** 2025-10-18
-**Project Status:** Stage 4 - Caching & Search API (In Progress)
+**Project Status:** Stage 5 - Frontend Auth Pages (In Progress)
 
 ---
 
@@ -70,15 +70,15 @@ An AI-powered weekend activity finder that helps parents discover activities for
 │    └─ Duration: 3-4 days                                    │
 │                                                             │
 │ ✅ Stage 3: Search Infrastructure          [100%]  [COMPLETED]│
-│    └─ Branch: feat/search-infrastructure (PR #3)            │
+│    └─ Branch: feat/search-infrastructure (PR #3 merged)     │
 │    └─ Duration: 4-5 days                                    │
 │                                                             │
-│ 🔄 Stage 4: Caching & Search API           [75%]  [IN PROGRESS]│
-│    └─ Branch: feat/caching-and-search-api                   │
+│ ✅ Stage 4: Caching & Search API           [100%]  [COMPLETED]│
+│    └─ Branch: feat/caching-and-search-api (PR #4 merged)    │
 │    └─ Duration: 3-4 days                                    │
 │                                                             │
-│ ⬜ Stage 5: Frontend Auth Pages            [0%]  [NOT STARTED]│
-│    └─ Branch: feat/frontend-auth                            │
+│ 🔄 Stage 5: Frontend Auth Pages            [90%]  [IN PROGRESS]│
+│    └─ Branch: feat/frontend-auth-pages                      │
 │    └─ Duration: 2-3 days                                    │
 │                                                             │
 │ ⬜ Stage 6: Frontend Main Features         [0%]  [NOT STARTED]│
@@ -90,7 +90,7 @@ An AI-powered weekend activity finder that helps parents discover activities for
 │    └─ Duration: 3-4 days                                    │
 │                                                             │
 ├─────────────────────────────────────────────────────────────┤
-│ Overall Progress: ████████████░░░░░░░░░░░░░░░░░░  3/7     │
+│ Overall Progress: ████████████████░░░░░░░░░░░░░░  4/7     │
 └─────────────────────────────────────────────────────────────┘
 
 Legend: ⬜ Not Started | 🔄 In Progress | ✅ Completed | ❌ Blocked
@@ -100,8 +100,8 @@ Legend: ⬜ Not Started | 🔄 In Progress | ✅ Completed | ❌ Blocked
 
 ```bash
 # Update this when changing branches
-Current: feat/caching-and-search-api
-Next: feat/frontend-auth (after Stage 4 merge)
+Current: feat/frontend-auth-pages
+Next: feat/frontend-features (after Stage 5 merge)
 ```
 
 ---
@@ -1110,5 +1110,5 @@ docker compose exec postgres psql -U weekend_user -d weekend_finder -c "\dt"
 ---
 
 **Last Updated:** 2025-10-18
-**Current Stage:** Stage 4 - Caching & Search API
-**Status:** In Progress 🔄 (75% complete)
+**Current Stage:** Stage 5 - Frontend Auth Pages
+**Status:** In Progress 🔄 (90% complete)
