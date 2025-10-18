@@ -1,9 +1,9 @@
 ---
 import Layout from '@/layouts/Layout.astro';
-import { validateSession } from '@/lib/auth/session';
+import { validateSession, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 
 // Server-side authentication check
-const sessionToken = Astro.cookies.get('session')?.value;
+const sessionToken = Astro.cookies.get(SESSION_COOKIE_NAME)?.value;
 
 if (!sessionToken) {
   return Astro.redirect('/login');

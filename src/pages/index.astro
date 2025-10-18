@@ -1,8 +1,8 @@
 ---
-import { validateSession } from '@/lib/auth/session';
+import { validateSession, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 
 // Check if user is authenticated
-const sessionToken = Astro.cookies.get('session')?.value;
+const sessionToken = Astro.cookies.get(SESSION_COOKIE_NAME)?.value;
 const sessionData = sessionToken ? await validateSession(sessionToken) : null;
 
 // Redirect based on auth state
