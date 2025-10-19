@@ -148,17 +148,21 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
         const executionTimeMs = Date.now() - startTime;
 
+        // Calculate cost with detailed breakdown
+        const costData = calculateCost(
+          agentUsage.inputTokens,
+          agentUsage.outputTokens,
+          agentUsage.searchCount
+        );
+
         // Calculate metadata
         const metadata: CacheMetadata = {
           promptTokens: agentUsage.inputTokens,
           completionTokens: agentUsage.outputTokens,
           searchCount: agentUsage.searchCount,
           model: 'claude-haiku-4-5-20251001',
-          estimatedCost: calculateCost(
-            agentUsage.inputTokens,
-            agentUsage.outputTokens,
-            agentUsage.searchCount
-          ),
+          estimatedCost: costData.total,
+          costBreakdown: costData.breakdown,
           executionTimeMs,
         };
 
