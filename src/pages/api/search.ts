@@ -164,6 +164,21 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     );
   }
 
+  // Security validation
+  const validationError = validateSearchInput(searchParams);
+  if (validationError) {
+    return new Response(
+      JSON.stringify({
+        error: 'Validation failed',
+        message: validationError,
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
   // Create SSE stream
   const stream = new ReadableStream({
     async start(controller) {

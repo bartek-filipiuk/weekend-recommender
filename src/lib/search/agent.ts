@@ -22,7 +22,7 @@ import {
  */
 
 const CLAUDE_MODEL = 'claude-haiku-4-5-20251001'; // Haiku 4.5
-const MAX_TOKENS = 4096; // Maximum tokens for response
+const MAX_TOKENS = 2048; // Maximum tokens for response (reduced for cost optimization)
 const TEMPERATURE = 1.0; // Creativity level (1.0 = default)
 
 /**
