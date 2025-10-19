@@ -21,7 +21,7 @@ import {
  * - Total: ~$0.013 per search request
  */
 
-const CLAUDE_MODEL = 'claude-haiku-4-20250213'; // Haiku 4.5
+const CLAUDE_MODEL = 'claude-haiku-4-5-20251001'; // Haiku 4.5
 const MAX_TOKENS = 4096; // Maximum tokens for response
 const TEMPERATURE = 1.0; // Creativity level (1.0 = default)
 
@@ -179,47 +179,49 @@ export async function findWeekendActivities(
       tools: [SERPER_TOOL_DEFINITION],
     });
 
-    // Check if Claude wants to use a tool
-    const toolUseBlock = response.content.find(
+    // Get ALL tool_use blocks (Claude might request multiple searches)
+    const toolUseBlocks = response.content.filter(
       (block): block is Anthropic.Messages.ToolUseBlock =>
         block.type === 'tool_use'
     );
 
-    if (toolUseBlock) {
-      // Claude wants to use the web_search tool
-      console.log(`[Agent] Tool use: ${toolUseBlock.name}`, toolUseBlock.input);
+    if (toolUseBlocks.length > 0) {
+      // Execute all tool calls in parallel
+      const toolResults = await Promise.all(
+        toolUseBlocks.map(async (toolUseBlock) => {
+          console.log(`[Agent] Tool use: ${toolUseBlock.name}`, toolUseBlock.input);
 
-      // Execute the tool
-      let toolResult: string;
-      try {
-        toolResult = await executeWebSearchTool(
-          toolUseBlock.input as { query: string; num_results?: number }
-        );
-      } catch (error) {
-        toolResult = `Error executing search: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`;
-      }
+          let toolResult: string;
+          try {
+            toolResult = await executeWebSearchTool(
+              toolUseBlock.input as { query: string; num_results?: number }
+            );
+          } catch (error) {
+            toolResult = `Error executing search: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`;
+          }
 
-      // Add assistant's response (with tool use) to messages
+          return {
+            type: 'tool_result' as const,
+            tool_use_id: toolUseBlock.id,
+            content: toolResult,
+          };
+        })
+      );
+
+      // Add assistant's response with all tool uses
       messages.push({
         role: 'assistant',
         content: response.content,
       });
 
-      // Add tool result to messages
+      // Add all tool results in a single user message
       messages.push({
         role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: toolUseBlock.id,
-            content: toolResult,
-          },
-        ],
+        content: toolResults,
       });
 
-      // Continue the loop to get Claude's next response
       continue;
     }
 
@@ -284,6 +286,11 @@ export async function findWeekendActivitiesStreaming(
     },
   ];
 
+  // Track token usage and search count
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let searchCount = 0;
+
   let maxIterations = 10;
   let iteration = 0;
 
@@ -299,49 +306,66 @@ export async function findWeekendActivitiesStreaming(
       tools: [SERPER_TOOL_DEFINITION],
     });
 
-    const toolUseBlock = response.content.find(
+    // Track token usage from this API call
+    if (response.usage) {
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
+    }
+
+    // Get ALL tool_use blocks (Claude might request multiple searches)
+    const toolUseBlocks = response.content.filter(
       (block): block is Anthropic.Messages.ToolUseBlock =>
         block.type === 'tool_use'
     );
 
-    if (toolUseBlock) {
-      onEvent({
-        type: 'tool_use',
-        tool: toolUseBlock.name,
-        input: toolUseBlock.input as Record<string, unknown>,
-      });
+    if (toolUseBlocks.length > 0) {
+      // Count search operations
+      searchCount += toolUseBlocks.length;
 
-      let toolResult: string;
-      try {
-        toolResult = await executeWebSearchTool(
-          toolUseBlock.input as { query: string; num_results?: number }
-        );
-        onEvent({
-          type: 'tool_result',
-          tool: toolUseBlock.name,
-          result: `Found ${toolResult.split('\n').length} lines of results`,
-        });
-      } catch (error) {
-        toolResult = `Error: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`;
-        onEvent({ type: 'error', error: toolResult });
-      }
+      // Execute all tool calls in parallel
+      const toolResults = await Promise.all(
+        toolUseBlocks.map(async (toolUseBlock) => {
+          onEvent({
+            type: 'tool_use',
+            tool: toolUseBlock.name,
+            input: toolUseBlock.input as Record<string, unknown>,
+          });
 
+          let toolResult: string;
+          try {
+            toolResult = await executeWebSearchTool(
+              toolUseBlock.input as { query: string; num_results?: number }
+            );
+            onEvent({
+              type: 'tool_result',
+              tool: toolUseBlock.name,
+              result: `Found ${toolResult.split('\n').length} lines of results`,
+            });
+          } catch (error) {
+            toolResult = `Error: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`;
+            onEvent({ type: 'error', error: toolResult });
+          }
+
+          return {
+            type: 'tool_result' as const,
+            tool_use_id: toolUseBlock.id,
+            content: toolResult,
+          };
+        })
+      );
+
+      // Add assistant's response with all tool uses
       messages.push({
         role: 'assistant',
         content: response.content,
       });
 
+      // Add all tool results in a single user message
       messages.push({
         role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: toolUseBlock.id,
-            content: toolResult,
-          },
-        ],
+        content: toolResults,
       });
 
       continue;
@@ -362,7 +386,15 @@ export async function findWeekendActivitiesStreaming(
         }
 
         const recommendations: RecommendationsResponse = JSON.parse(jsonText);
-        onEvent({ type: 'complete', recommendations });
+        onEvent({
+          type: 'complete',
+          recommendations,
+          usage: {
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+            searchCount,
+          },
+        });
         return recommendations;
       } catch (error) {
         const errorMsg = `Failed to parse response: ${

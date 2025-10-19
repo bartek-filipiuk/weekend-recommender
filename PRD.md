@@ -1,3 +1,4 @@
+
 # Product Requirements Document (PRD)
 ## Weekend Activity Finder - AI-Powered Recommendations
 

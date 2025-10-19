@@ -154,11 +154,11 @@ if (id && id !== 'new') {
           <!-- Recommendation cards will be added here -->
         </div>
 
-        <!-- Metadata (execution details) -->
+        <!-- Metadata (execution details) - Cost removed for users, visible only to admins -->
         <div id="metadata-section" class="mt-8 hidden">
           <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <h4 class="text-sm font-semibold text-gray-700 mb-2">Search Details</h4>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
               <div>
                 <p class="text-gray-500">Execution Time</p>
                 <p id="exec-time" class="font-medium text-gray-900">-</p>
@@ -166,10 +166,6 @@ if (id && id !== 'new') {
               <div>
                 <p class="text-gray-500">Model</p>
                 <p id="model" class="font-medium text-gray-900">-</p>
-              </div>
-              <div>
-                <p class="text-gray-500">Cost (est.)</p>
-                <p id="cost" class="font-medium text-gray-900">-</p>
               </div>
               <div>
                 <p class="text-gray-500">Access Count</p>
@@ -215,6 +211,7 @@ if (id && id !== 'new') {
     const logoutBtn = document.getElementById('logout-btn');
 
     let currentRecommendations = null;
+    let resultsDisplayed = false; // Guard to prevent duplicate displays
 
     // Logout handler
     logoutBtn?.addEventListener('click', async () => {
@@ -283,6 +280,13 @@ if (id && id !== 'new') {
     }
 
     function displayResults(data, isCached = false) {
+      // Guard: prevent duplicate processing (can happen with race conditions)
+      if (resultsDisplayed) {
+        console.log('[displayResults] Already displayed, skipping');
+        return;
+      }
+      resultsDisplayed = true;
+
       if (window.hideProgress) {
         window.hideProgress();
       }
@@ -308,21 +312,25 @@ if (id && id !== 'new') {
         searchDetails.textContent = `${data.city} • ${dateStart} - ${dateEnd}`;
       }
 
+      // Clear existing recommendations to prevent duplicates
+      if (recommendationsGrid) {
+        recommendationsGrid.innerHTML = '';
+      }
+
       // Display recommendations
-      const activities = data.recommendations?.activities || data.recommendations?.items || [];
+      const activities = data.recommendations?.recommendations || [];
 
       activities.forEach((activity, index) => {
         const card = createRecommendationCard(activity, index + 1);
         recommendationsGrid?.appendChild(card);
       });
 
-      // Display metadata
+      // Display metadata (cost data still saved to DB for admin dashboard)
       if (data.metadata && metadataSection) {
         metadataSection.classList.remove('hidden');
 
         const execTime = document.getElementById('exec-time');
         const model = document.getElementById('model');
-        const cost = document.getElementById('cost');
         const accessCount = document.getElementById('access-count');
 
         if (execTime && data.metadata.executionTimeMs) {
@@ -330,9 +338,6 @@ if (id && id !== 'new') {
         }
         if (model && data.metadata.model) {
           model.textContent = data.metadata.model;
-        }
-        if (cost && data.metadata.estimatedCost !== undefined) {
-          cost.textContent = `$${data.metadata.estimatedCost.toFixed(4)}`;
         }
         if (accessCount && data.accessCount) {
           accessCount.textContent = `${data.accessCount}x`;
@@ -346,6 +351,23 @@ if (id && id !== 'new') {
 
       const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
       const rankEmoji = medals[rank] || `#${rank}`;
+
+      // Handle different data structures
+      const location = typeof activity.location === 'object'
+        ? activity.location.address || activity.location.city || 'Location not specified'
+        : activity.location || 'Location not specified';
+
+      // Handle cost from different data structures (avoid undefined access)
+      let cost = 'Price not specified';
+      if (activity.cost) {
+        cost = activity.cost;
+      } else if (activity.pricing?.amount) {
+        cost = `${activity.pricing.amount} PLN`;
+      } else if (activity.pricing?.details) {
+        cost = activity.pricing.details;
+      }
+
+      const reasoning = activity.reasoning || activity.whyRecommended || 'Great for families!';
 
       div.innerHTML = `
         <div class="flex items-start justify-between mb-4">
@@ -363,7 +385,7 @@ if (id && id !== 'new') {
             </svg>
             <div>
               <p class="text-xs text-gray-500 uppercase tracking-wide">Location</p>
-              <p class="text-sm text-gray-900 font-medium">${activity.location}</p>
+              <p class="text-sm text-gray-900 font-medium">${location}</p>
             </div>
           </div>
           <div class="flex items-start space-x-2">
@@ -372,13 +394,13 @@ if (id && id !== 'new') {
             </svg>
             <div>
               <p class="text-xs text-gray-500 uppercase tracking-wide">Cost</p>
-              <p class="text-sm text-gray-900 font-medium">${activity.cost}</p>
+              <p class="text-sm text-gray-900 font-medium">${cost}</p>
             </div>
           </div>
         </div>
         <div class="border-t border-gray-200 pt-4">
           <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Why this recommendation</p>
-          <p class="text-sm text-gray-600 italic">${activity.reasoning}</p>
+          <p class="text-sm text-gray-600 italic">${reasoning}</p>
         </div>
       `;
 
@@ -399,11 +421,17 @@ if (id && id !== 'new') {
         sessionStorage.removeItem('pendingSearch');
         const searchParams = JSON.parse(pendingSearchJson);
 
-        // Show progress
-        if (window.showProgress) {
-          window.showProgress();
-          window.addProgressMessage('Initiating search...', 'info');
-        }
+        // Wait for ProgressBar to initialize, then show progress
+        const showProgressBar = () => {
+          if (typeof window.showProgress === 'function') {
+            window.showProgress();
+            window.addProgressMessage('Initiating search...', 'info');
+          } else {
+            // Retry if not yet loaded
+            setTimeout(showProgressBar, 50);
+          }
+        };
+        showProgressBar();
 
         // Populate search details
         if (searchDetails) {

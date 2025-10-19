@@ -10,6 +10,15 @@ import type { SearchRequest, RecommendationsResponse } from '../search/types';
 const CACHE_TTL_MS = 48 * 60 * 60 * 1000;
 
 /**
+ * Cost breakdown for search operation
+ */
+export interface CostBreakdown {
+  claudeCost: number; // Cost from Claude API tokens (USD)
+  serperCost: number; // Cost from Serper API searches (USD)
+  total: number; // Total cost (USD)
+}
+
+/**
  * Agent metadata stored with cached results
  */
 export interface CacheMetadata {
@@ -17,7 +26,8 @@ export interface CacheMetadata {
   completionTokens?: number;
   searchCount: number;
   model: string;
-  estimatedCost: number; // in USD
+  estimatedCost: number; // in USD (for backward compatibility)
+  costBreakdown: CostBreakdown; // Detailed breakdown
   executionTimeMs: number;
 }
 
@@ -129,11 +139,11 @@ export async function storeSearchResults(
 }
 
 /**
- * Calculate estimated cost from token usage
+ * Calculate estimated cost from token usage with detailed breakdown
  *
- * Claude Haiku 4.5 pricing:
- * - Input: $0.25 per million tokens
- * - Output: $1.25 per million tokens
+ * Claude Haiku 4.5 pricing (as of 2025):
+ * - Input: $0.80 per million tokens
+ * - Output: $4.00 per million tokens
  *
  * Serper API pricing:
  * - $0.001 per search
@@ -141,18 +151,33 @@ export async function storeSearchResults(
  * @param promptTokens - Input tokens used
  * @param completionTokens - Output tokens used
  * @param searchCount - Number of Serper searches
- * @returns Estimated cost in USD
+ * @returns Object with total cost and detailed breakdown
  */
 export function calculateCost(
   promptTokens: number = 0,
   completionTokens: number = 0,
   searchCount: number = 0
-): number {
-  const inputCost = (promptTokens / 1_000_000) * 0.25;
-  const outputCost = (completionTokens / 1_000_000) * 1.25;
-  const searchCost = searchCount * 0.001;
+): { total: number; breakdown: CostBreakdown } {
+  // Claude Haiku 4.5 pricing
+  const INPUT_TOKEN_COST = 0.80 / 1_000_000; // $0.80 per million
+  const OUTPUT_TOKEN_COST = 4.00 / 1_000_000; // $4.00 per million
 
-  return inputCost + outputCost + searchCost;
+  // Serper API pricing
+  const SERPER_SEARCH_COST = 0.001; // $0.001 per search
+
+  const claudeCost =
+    promptTokens * INPUT_TOKEN_COST + completionTokens * OUTPUT_TOKEN_COST;
+  const serperCost = searchCount * SERPER_SEARCH_COST;
+  const total = claudeCost + serperCost;
+
+  return {
+    total: Number(total.toFixed(6)),
+    breakdown: {
+      claudeCost: Number(claudeCost.toFixed(6)),
+      serperCost: Number(serperCost.toFixed(6)),
+      total: Number(total.toFixed(6)),
+    },
+  };
 }
 
 /**

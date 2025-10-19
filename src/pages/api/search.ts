@@ -132,9 +132,15 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         // Cache miss - perform agent search with streaming
         const startTime = Date.now();
 
+        let agentUsage = { inputTokens: 0, outputTokens: 0, searchCount: 0 };
+
         const recommendations = await findWeekendActivitiesStreaming(
           searchParams,
           (event: AgentStreamEvent) => {
+            // Capture usage metadata from complete event
+            if (event.type === 'complete' && event.usage) {
+              agentUsage = event.usage;
+            }
             // Forward agent events to SSE stream
             sendEvent(event);
           }
@@ -142,13 +148,21 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
         const executionTimeMs = Date.now() - startTime;
 
+        // Calculate cost with detailed breakdown
+        const costData = calculateCost(
+          agentUsage.inputTokens,
+          agentUsage.outputTokens,
+          agentUsage.searchCount
+        );
+
         // Calculate metadata
         const metadata: CacheMetadata = {
-          promptTokens: 0, // TODO: Extract from agent response
-          completionTokens: 0, // TODO: Extract from agent response
-          searchCount: 0, // TODO: Extract from agent response
-          model: 'claude-haiku-4-20250213',
-          estimatedCost: calculateCost(0, 0, 0), // TODO: Use actual values
+          promptTokens: agentUsage.inputTokens,
+          completionTokens: agentUsage.outputTokens,
+          searchCount: agentUsage.searchCount,
+          model: 'claude-haiku-4-5-20251001',
+          estimatedCost: costData.total,
+          costBreakdown: costData.breakdown,
           executionTimeMs,
         };
 
