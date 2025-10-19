@@ -10,6 +10,71 @@ import { findWeekendActivitiesStreaming } from '@/lib/search/agent';
 import type { SearchRequest, AgentStreamEvent } from '@/lib/search/types';
 
 /**
+ * Validate search request for security issues
+ *
+ * Checks for:
+ * - Prompt injection attempts
+ * - SQL injection patterns (defense in depth)
+ * - XSS attempts
+ * - Excessive input length
+ *
+ * @param params - Search request parameters
+ * @returns Error message if validation fails, null if valid
+ */
+function validateSearchInput(params: SearchRequest): string | null {
+  // Check city name
+  if (params.city.length > 100) {
+    return 'City name is too long (max 100 characters)';
+  }
+
+  // Check preferences if provided
+  if (params.preferences) {
+    if (params.preferences.length > 500) {
+      return 'Preferences text is too long (max 500 characters)';
+    }
+
+    // Detect potential prompt injection patterns
+    const suspiciousPatterns = [
+      /ignore\s+(previous|above|all|any)(\s+\w+)*\s*instructions/i,
+      /disregard\s+(previous|above|all|any)/i,
+      /forget\s+(everything|all|previous)/i,
+      /new\s+instructions/i,
+      /system\s*:/i,
+      /assistant\s*:/i,
+      /<\s*script/i, // XSS attempt
+      /javascript\s*:/i, // XSS attempt
+      /on\w+\s*=/i, // Event handlers (XSS)
+      /(\bor\b|\band\b).*=.*['"]/, // SQL injection patterns
+      /union\s+select/i, // SQL injection
+      /drop\s+table/i, // SQL injection
+      /delete\s+from/i, // SQL injection
+    ];
+
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(params.preferences)) {
+        return 'Invalid input detected. Please provide legitimate activity preferences only.';
+      }
+    }
+  }
+
+  // Validate attendees
+  if (params.attendees.length > 20) {
+    return 'Too many attendees (max 20)';
+  }
+
+  for (const attendee of params.attendees) {
+    if (attendee.age < 0 || attendee.age > 120) {
+      return 'Invalid age value';
+    }
+    if (!['child', 'adult', 'infant'].includes(attendee.role)) {
+      return 'Invalid attendee role';
+    }
+  }
+
+  return null;
+}
+
+/**
  * Search API endpoint with Server-Sent Events (SSE) streaming
  *
  * POST /api/search
@@ -91,6 +156,21 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       JSON.stringify({
         error: 'Missing required fields',
         message: 'city, dateRangeStart, dateRangeEnd, and attendees[] are required',
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // Security validation
+  const validationError = validateSearchInput(searchParams);
+  if (validationError) {
+    return new Response(
+      JSON.stringify({
+        error: 'Validation failed',
+        message: validationError,
       }),
       {
         status: 400,
