@@ -35,8 +35,8 @@ function validateSearchInput(params: SearchRequest): string | null {
 
     // Detect potential prompt injection patterns
     const suspiciousPatterns = [
-      /ignore\s+(previous|above|all)\s+instructions/i,
-      /disregard\s+(previous|above|all)/i,
+      /ignore\s+(previous|above|all|any)(\s+\w+)*\s*instructions/i,
+      /disregard\s+(previous|above|all|any)/i,
       /forget\s+(everything|all|previous)/i,
       /new\s+instructions/i,
       /system\s*:/i,
