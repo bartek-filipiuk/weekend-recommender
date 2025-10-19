@@ -357,9 +357,15 @@ if (id && id !== 'new') {
         ? activity.location.address || activity.location.city || 'Location not specified'
         : activity.location || 'Location not specified';
 
-      const cost = activity.cost || activity.pricing?.details || activity.pricing?.amount
-        ? `${activity.pricing.amount} PLN`
-        : 'Price not specified';
+      // Handle cost from different data structures (avoid undefined access)
+      let cost = 'Price not specified';
+      if (activity.cost) {
+        cost = activity.cost;
+      } else if (activity.pricing?.amount) {
+        cost = `${activity.pricing.amount} PLN`;
+      } else if (activity.pricing?.details) {
+        cost = activity.pricing.details;
+      }
 
       const reasoning = activity.reasoning || activity.whyRecommended || 'Great for families!';
 
