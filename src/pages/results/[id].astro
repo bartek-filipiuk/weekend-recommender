@@ -309,7 +309,7 @@ if (id && id !== 'new') {
       }
 
       // Display recommendations
-      const activities = data.recommendations?.activities || data.recommendations?.items || [];
+      const activities = data.recommendations?.recommendations || [];
 
       activities.forEach((activity, index) => {
         const card = createRecommendationCard(activity, index + 1);
@@ -347,6 +347,17 @@ if (id && id !== 'new') {
       const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
       const rankEmoji = medals[rank] || `#${rank}`;
 
+      // Handle different data structures
+      const location = typeof activity.location === 'object'
+        ? activity.location.address || activity.location.city || 'Location not specified'
+        : activity.location || 'Location not specified';
+
+      const cost = activity.cost || activity.pricing?.details || activity.pricing?.amount
+        ? `${activity.pricing.amount} PLN`
+        : 'Price not specified';
+
+      const reasoning = activity.reasoning || activity.whyRecommended || 'Great for families!';
+
       div.innerHTML = `
         <div class="flex items-start justify-between mb-4">
           <div class="flex items-center space-x-2">
@@ -363,7 +374,7 @@ if (id && id !== 'new') {
             </svg>
             <div>
               <p class="text-xs text-gray-500 uppercase tracking-wide">Location</p>
-              <p class="text-sm text-gray-900 font-medium">${activity.location}</p>
+              <p class="text-sm text-gray-900 font-medium">${location}</p>
             </div>
           </div>
           <div class="flex items-start space-x-2">
@@ -372,13 +383,13 @@ if (id && id !== 'new') {
             </svg>
             <div>
               <p class="text-xs text-gray-500 uppercase tracking-wide">Cost</p>
-              <p class="text-sm text-gray-900 font-medium">${activity.cost}</p>
+              <p class="text-sm text-gray-900 font-medium">${cost}</p>
             </div>
           </div>
         </div>
         <div class="border-t border-gray-200 pt-4">
           <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Why this recommendation</p>
-          <p class="text-sm text-gray-600 italic">${activity.reasoning}</p>
+          <p class="text-sm text-gray-600 italic">${reasoning}</p>
         </div>
       `;
 
@@ -399,11 +410,17 @@ if (id && id !== 'new') {
         sessionStorage.removeItem('pendingSearch');
         const searchParams = JSON.parse(pendingSearchJson);
 
-        // Show progress
-        if (window.showProgress) {
-          window.showProgress();
-          window.addProgressMessage('Initiating search...', 'info');
-        }
+        // Wait for ProgressBar to initialize, then show progress
+        const showProgressBar = () => {
+          if (typeof window.showProgress === 'function') {
+            window.showProgress();
+            window.addProgressMessage('Initiating search...', 'info');
+          } else {
+            // Retry if not yet loaded
+            setTimeout(showProgressBar, 50);
+          }
+        };
+        showProgressBar();
 
         // Populate search details
         if (searchDetails) {

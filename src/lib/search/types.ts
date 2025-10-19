@@ -134,6 +134,15 @@ export interface AgentMessage {
 }
 
 /**
+ * Agent usage metadata
+ */
+export interface AgentUsageMetadata {
+  inputTokens: number;
+  outputTokens: number;
+  searchCount: number;
+}
+
+/**
  * Agent streaming event types
  */
 export type AgentStreamEvent =
@@ -142,5 +151,9 @@ export type AgentStreamEvent =
   | { type: 'tool_result'; tool: string; result: string }
   | { type: 'text_delta'; text: string }
   | { type: 'thinking'; text: string }
-  | { type: 'complete'; recommendations: RecommendationsResponse }
+  | {
+      type: 'complete';
+      recommendations: RecommendationsResponse;
+      usage?: AgentUsageMetadata;
+    }
   | { type: 'error'; error: string };
