@@ -27,8 +27,8 @@ Thumbs.db
 *.swo
 *~
 
-# Drizzle
-drizzle/
+# Drizzle (ignore meta snapshots, keep migrations)
+drizzle/meta/
 
 # Testing
 cookies.txt
