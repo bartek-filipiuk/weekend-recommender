@@ -92,6 +92,7 @@ export async function validateSession(sessionToken: string): Promise<{
   userId: number;
   username: string;
   sessionId: number;
+  role: 'user' | 'admin';
 } | null> {
   try {
     const now = new Date();
@@ -103,6 +104,7 @@ export async function validateSession(sessionToken: string): Promise<{
         userId: sessions.userId,
         expiresAt: sessions.expiresAt,
         username: users.username,
+        role: users.role,
       })
       .from(sessions)
       .innerJoin(users, eq(sessions.userId, users.id))
@@ -124,6 +126,7 @@ export async function validateSession(sessionToken: string): Promise<{
       userId: session.userId,
       username: session.username,
       sessionId: session.sessionId,
+      role: session.role,
     };
   } catch (error) {
     console.error('Session validation error:', error);

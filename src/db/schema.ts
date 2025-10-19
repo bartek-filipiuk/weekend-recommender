@@ -1,4 +1,9 @@
-import { pgTable, serial, varchar, timestamp, text, integer, jsonb, date, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, timestamp, text, integer, jsonb, date, index, pgEnum } from 'drizzle-orm/pg-core';
+
+/**
+ * User role enum - defines access levels
+ */
+export const userRoleEnum = pgEnum('user_role', ['user', 'admin']);
 
 /**
  * Users table - stores user authentication data
@@ -7,6 +12,7 @@ export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   username: varchar('username', { length: 50 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  role: userRoleEnum('role').notNull().default('user'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (table) => ({
