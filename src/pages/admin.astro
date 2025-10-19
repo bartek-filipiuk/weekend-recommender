@@ -1,6 +1,6 @@
 ---
 import { isAuthenticated } from '@/lib/auth/middleware';
-import Layout from '@/components/Layout.astro';
+import Layout from '@/layouts/Layout.astro';
 
 // Check authentication and admin role
 const user = await isAuthenticated(Astro);
