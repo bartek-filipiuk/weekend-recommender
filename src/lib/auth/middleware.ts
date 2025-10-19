@@ -15,6 +15,7 @@ export interface AuthenticatedUser {
   userId: number;
   username: string;
   sessionId: number;
+  role: 'user' | 'admin';
 }
 
 /**
@@ -105,4 +106,62 @@ export async function isAuthenticated(
   context: APIContext
 ): Promise<AuthenticatedUser | null> {
   return await getAuthenticatedUser(context);
+}
+
+/**
+ * Require admin role for an API route
+ *
+ * Returns authenticated admin user data if session is valid and user is admin,
+ * otherwise returns 401 Unauthorized or 403 Forbidden response
+ *
+ * Usage in API routes:
+ * ```ts
+ * export const GET: APIRoute = async (context) => {
+ *   const admin = await requireAdmin(context);
+ *   if (admin instanceof Response) return admin; // 401/403 error
+ *
+ *   // User is admin, proceed with request
+ *   return new Response(JSON.stringify({ message: 'Admin access granted' }));
+ * };
+ * ```
+ *
+ * @param context - Astro API context
+ * @returns Promise resolving to authenticated admin user data or error Response
+ */
+export async function requireAdmin(
+  context: APIContext
+): Promise<AuthenticatedUser | Response> {
+  const user = await getAuthenticatedUser(context);
+
+  if (!user) {
+    return new Response(
+      JSON.stringify({
+        error: 'Unauthorized',
+        message: 'You must be logged in to access this resource',
+      }),
+      {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+  }
+
+  if (user.role !== 'admin') {
+    return new Response(
+      JSON.stringify({
+        error: 'Forbidden',
+        message: 'Admin access required',
+      }),
+      {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+  }
+
+  return user;
 }

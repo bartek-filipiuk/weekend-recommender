@@ -1,0 +1,186 @@
+---
+import { isAuthenticated } from '@/lib/auth/middleware';
+import Layout from '@/layouts/Layout.astro';
+
+// Check authentication and admin role
+const user = await isAuthenticated(Astro);
+
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+if (user.role !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+---
+
+<Layout title="Admin Dashboard - Weekend Finder">
+  <div class="min-h-screen bg-gray-100">
+    <!-- Header -->
+    <header class="bg-white shadow">
+      <div class="container mx-auto px-4 py-6 flex justify-between items-center">
+        <h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+        <div class="flex items-center gap-4">
+          <span class="text-gray-600">Admin: {user.username}</span>
+          <a href="/dashboard" class="text-blue-600 hover:text-blue-800">Back to Dashboard</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+      <!-- Stats Overview -->
+      <div id="stats-section" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+          <h3 class="text-sm font-medium text-gray-500 uppercase">Total Searches</h3>
+          <p id="total-searches" class="text-3xl font-bold text-gray-900 mt-2">...</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+          <h3 class="text-sm font-medium text-gray-500 uppercase">Total Users</h3>
+          <p id="total-users" class="text-3xl font-bold text-gray-900 mt-2">...</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+          <h3 class="text-sm font-medium text-gray-500 uppercase">Total Cost</h3>
+          <p id="total-cost" class="text-3xl font-bold text-gray-900 mt-2">...</p>
+          <p class="text-xs text-gray-500 mt-1">USD</p>
+        </div>
+      </div>
+
+      <!-- Recent Searches Table -->
+      <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-xl font-semibold text-gray-900">Recent Searches</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">City</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Range</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exec Time</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Searches</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Access Count</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+              </tr>
+            </thead>
+            <tbody id="searches-tbody" class="bg-white divide-y divide-gray-200">
+              <tr>
+                <td colspan="9" class="px-6 py-4 text-center text-gray-500">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div id="pagination" class="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+          <div class="text-sm text-gray-700">
+            Showing <span id="page-info">...</span>
+          </div>
+          <div class="flex gap-2">
+            <button id="prev-page" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+              Previous
+            </button>
+            <button id="next-page" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+              Next
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let currentPage = 1;
+    const limit = 20;
+
+    /**
+     * Escape HTML to prevent XSS attacks
+     * Converts special characters to HTML entities
+     */
+    function escapeHtml(str: string | number): string {
+      if (typeof str === 'number') return String(str);
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    async function loadAnalytics() {
+      try {
+        const response = await fetch(`/api/admin/analytics?page=${currentPage}&limit=${limit}`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Update stats
+        document.getElementById('total-searches')!.textContent = data.stats.totalSearches.toLocaleString();
+        document.getElementById('total-users')!.textContent = data.stats.totalUsers.toLocaleString();
+        document.getElementById('total-cost')!.textContent = `$${data.stats.totalCost.toFixed(6)}`;
+
+        // Update searches table
+        const tbody = document.getElementById('searches-tbody')!;
+
+        if (data.searches.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-4 text-center text-gray-500">No searches found</td></tr>';
+        } else {
+          tbody.innerHTML = data.searches.map((search: any) => {
+            const dateRange = `${new Date(search.dateRange.start).toLocaleDateString()} - ${new Date(search.dateRange.end).toLocaleDateString()}`;
+            const created = new Date(search.createdAt).toLocaleString();
+            const execTime = `${search.executionTime}ms`;
+            const cost = `$${search.cost.toFixed(6)}`;
+
+            return `
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escapeHtml(search.id)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escapeHtml(search.user.username)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escapeHtml(search.city)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escapeHtml(dateRange)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escapeHtml(cost)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escapeHtml(execTime)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escapeHtml(search.searchCount)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escapeHtml(search.accessCount)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(created)}</td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        // Update pagination
+        const start = (data.pagination.page - 1) * data.pagination.limit + 1;
+        const end = Math.min(data.pagination.page * data.pagination.limit, data.pagination.totalResults);
+        document.getElementById('page-info')!.textContent = `${start}-${end} of ${data.pagination.totalResults}`;
+
+        const prevBtn = document.getElementById('prev-page') as HTMLButtonElement;
+        const nextBtn = document.getElementById('next-page') as HTMLButtonElement;
+
+        prevBtn.disabled = !data.pagination.hasPreviousPage;
+        nextBtn.disabled = !data.pagination.hasNextPage;
+
+      } catch (error) {
+        console.error('Failed to load analytics:', error);
+        document.getElementById('searches-tbody')!.innerHTML =
+          '<tr><td colspan="9" class="px-6 py-4 text-center text-red-600">Failed to load data</td></tr>';
+      }
+    }
+
+    // Pagination handlers
+    document.getElementById('prev-page')!.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        loadAnalytics();
+      }
+    });
+
+    document.getElementById('next-page')!.addEventListener('click', () => {
+      currentPage++;
+      loadAnalytics();
+    });
+
+    // Load initial data
+    loadAnalytics();
+  </script>
+</Layout>
